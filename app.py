@@ -5,22 +5,23 @@ from datetime import datetime
 import streamlit.components.v1 as components
 
 # Sayfa Ayarları
-st.set_page_config(page_title="CoachInvest 100K Terminal", layout="wide")
+st.set_page_config(page_title="CoachInvest Terminal", layout="wide")
 
-# Session State: Tarihçeyi ve verileri tutmak için
+# Session State: Tarihçe ve işlemler için hafıza
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# CSS: Tablo ve kart tasarımları
+# CSS: Arayüz iyileştirme
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
     div[data-testid="stMetric"] { background-color: #1e2130; padding: 10px; border-radius: 10px; border: 1px solid #3e4255; }
-    [data-testid="stDataFrame"] { border-radius: 10px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #1e2130; border-radius: 5px; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🛡️ CoachInvest: 100K Strateji Terminali")
+st.title("🛡️ CoachInvest: 100K Terminal")
 
 # --- YAN PANEL: PARA HAREKETLERİ ---
 st.sidebar.header("🎯 Hedef: 100.000 TL")
@@ -29,40 +30,27 @@ baslangic_hisse = 9008.50
 baslangic_fon = 9947.37
 
 st.sidebar.subheader("📥 Para Giriş/Çıkış")
-eklenen = st.sidebar.number_input("Ekle (TL)", value=0.0)
-cekilen = st.sidebar.number_input("Çek (TL)", value=0.0)
+with st.sidebar.form("para_formu"):
+    eklenen = st.number_input("Ekle (TL)", value=0.0, step=100.0)
+    cekilen = st.number_input("Çek (TL)", value=0.0, step=100.0)
+    onayla = st.form_submit_button("İşlemi Onayla")
+    
+    if onayla:
+        simdi = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        if eklenen > 0:
+            st.session_state.history.append({"Zaman": simdi, "İşlem": "Ekleme", "Miktar": f"+{eklenen} TL"})
+        if cekilen > 0:
+            st.session_state.history.append({"Zaman": simdi, "İşlem": "Çekme", "Miktar": f"-{cekilen} TL"})
+        st.success(f"İşlem Kaydedildi!")
 
-if st.sidebar.button("İşlemi Onayla"):
-    simdi = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    if eklenen > 0:
-        st.session_state.history.append({"Zaman": simdi, "İşlem": "Ekleme", "Miktar": f"+{eklenen} TL"})
-    if cekilen > 0:
-        st.session_state.history.append({"Zaman": simdi, "İşlem": "Çekme", "Miktar": f"-{cekilen} TL"})
-    st.sidebar.success(f"İşlem kaydedildi: {simdi}")
+# Toplam nakit hesabı
+total_in = sum([float(i['Miktar'].replace(' TL','').replace('+','')) for i in st.session_state.history if 'Ekleme' in i['İşlem']])
+total_out = sum([float(i['Miktar'].replace(' TL','').replace('-','')) for i in st.session_state.history if 'Çekme' in i['İşlem']])
 
-current_cash = baslangic_fon + eklenen - cekilen
+current_cash = baslangic_fon + total_in - total_out
 toplam_varlik = baslangic_hisse + current_cash
-gunluk_net = current_cash * (0.60 / 365) * 0.90
+gunluk_pasif = current_cash * (0.60 / 365) * 0.90
 
 st.sidebar.metric("Toplam Varlık", f"{toplam_varlik:,.2f} TL")
 st.sidebar.progress(min(toplam_varlik / target, 1.0))
-st.sidebar.write(f"**Hedef İlerleme:** %{((toplam_varlik/target) * 100):.2f}")
-
-# --- TABS ---
-tab1, tab2, tab3 = st.tabs(["📊 Portföyüm", "🔍 BIST Terminal (A-Z)", "🕒 İşlem Tarihçesi"])
-
-with tab1:
-    col_a, col_b = st.columns([1, 1.2])
-    with col_a:
-        st.subheader("BIST Portföy")
-        hisseler = ["GENKM.IS", "NUHCM.IS", "TOASO.IS"]
-        lotlar = [85, 25, 12] 
-        p_data = []
-        for i, (h, l) in enumerate(zip(hisseler, lotlar), 1):
-            t = yf.Ticker(h)
-            p = t.history(period="1d")['Close'].iloc[-1]
-            p_data.append({"No": i, "Hisse": h, "Fiyat": f"{p:.2f}", "Değer": round(p*l, 2)})
-        
-        # 'No' sütununu daraltmak için column_config kullandım
-        st.dataframe(pd.DataFrame(p_data), hide_index=True, use_container_width=True,
-                     column_config={"No": st.column_config.
+st.sidebar.write(f"**Hedef İlerleme:** %{((toplam_varlik/target
