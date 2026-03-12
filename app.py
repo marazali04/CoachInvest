@@ -3,9 +3,15 @@ import yfinance as yf
 import pandas as pd
 
 # Sayfa Ayarları
-st.set_page_config(page_title="CoachInvest Pro", layout="wide")
+st.set_page_config(page_title="CoachInvest 100K", layout="wide")
 
-# CSS ile Görsel İyileştirme (Hatayı burada düzelttim: unsafe_allow_html)
+# Session State: Alım-Satım ve Para Hareketleri için hafıza oluşturma
+if 'gecmis_veriler' not in st.session_state:
+    st.session_state.gecmis_veriler = []
+if 'islemler' not in st.session_state:
+    st.session_state.islemler = []
+
+# CSS
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -13,56 +19,75 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 CoachInvest: Strateji ve Birim Merkezi")
-st.write(f"Son Güncelleme: {pd.Timestamp.now().strftime('%d-%m-%Y %H:%M')}")
+st.title("🛡️ CoachInvest: 100K Yolculuğu")
 st.markdown("---")
 
-# YAN PANEL (SIDEBAR)
-st.sidebar.header("🎯 15 Nisan Hedefi")
-target = 20000
-hisse_hesabi = st.sidebar.number_input("Hisse Portföy Değeri (TL)", value=9800)
-# Toplam Nakit: 18k + 1.1k + Gelecek 7k = 26.1k
-nakit_fon = st.sidebar.number_input("Fon + Nakit (TL)", value=26100) 
+# --- YAN PANEL: HEDEF VE PARA YÖNETİMİ ---
+st.sidebar.header("🎯 Hedef: 100.000 TL")
+target = 100000
 
-toplam = hisse_hesabi + nakit_fon
-progress = min(hisse_hesabi / target, 1.0)
+# Fotoğraftaki güncel verilerin
+baslangic_hisse = 9008.50
+baslangic_fon = 9947.37
 
-st.sidebar.metric("Saha (Hisse) Durumu", f"{hisse_hesabi:,} TL", f"{hisse_hesabi - target} TL")
-st.sidebar.progress(progress)
-st.sidebar.write(f"**20k Hedefine Ulaşma:** %{((progress) * 100):.2f}")
+eklenen_para = st.sidebar.number_input("📥 Para Ekle (TL)", value=0.0)
+cekilen_para = st.sidebar.number_input("📤 Para Çek (TL)", value=0.0)
 
-# ÜST ÖZET KARTLARI
+current_cash = baslangic_fon + eklenen_para - cekilen_para
+st.sidebar.markdown(f"**Güncel Fon Gücü:** {current_cash:,.2f} TL")
+
+# --- ÜST ÖZET KARTLARI ---
 m1, m2, m3 = st.columns(3)
-gunluk_net = nakit_fon * (0.60 / 365) * 0.90
-m1.metric("Toplam Varlık", f"{toplam:,.2f} TL")
+toplam_varlik = baslangic_hisse + current_cash
+gunluk_pasif = current_cash * (0.60 / 365) * 0.90
+
+m1.metric("Toplam Varlık", f"{toplam_varlik:,.2f} TL")
 m2.metric("Günlük Pasif Kazanç", f"{gunluk_net:.2f} TL", "Nakit Koruması")
-m3.metric("Nakit Gücü", f"{nakit_fon:,.2f} TL", f"%{(nakit_fon/toplam*100):.1f} Ağırlık")
+m3.metric("Hedef İlerleme", f"%{(toplam_varlik/target*100):.2f}", f"Kalan: {target-toplam_varlik:,.0f} TL")
 
-# ANA İÇERİK
-col1, col2 = st.columns([1, 1])
+st.sidebar.progress(min(toplam_varlik / target, 1.0))
 
-with col1:
-    st.subheader("📊 Portföy Detayları")
+# --- ANA İÇERİK: PORTFÖY VE GRAFİK ---
+tab1, tab2, tab3 = st.tabs(["📊 Portföyüm", "📈 Genel Durum", "🔍 Hisse Ara & İşlem Yap"])
+
+with tab1:
+    st.subheader("BIST Portföy Detayları")
     hisseler = ["GENKM.IS", "NUHCM.IS", "TOASO.IS"]
     lotlar = [85, 25, 12] 
     
     p_data = []
-    for h, l in zip(hisseler, lotlar):
-        try:
-            t = yf.Ticker(h)
-            p = t.history(period="1d")['Close'].iloc[-1]
-            p_data.append({"Hisse": h, "Fiyat": f"{p:.2f}", "Senin Payın": f"{p*l:,.2f} TL"})
-        except:
-            p_data.append({"Hisse": h, "Fiyat": "Hata", "Senin Payın": "0 TL"})
+    for i, (h, l) in enumerate(zip(hisseler, lotlar), 1): # 1'den başlatma
+        t = yf.Ticker(h)
+        p = t.history(period="1d")['Close'].iloc[-1]
+        p_data.append({"No": i, "Hisse": h, "Fiyat": f"{p:.2f}", "Değer": f"{p*l:,.2f} TL"})
+    
     st.table(p_data)
 
-with col2:
-    st.subheader("📈 GENKM Performans (Vur-Kaç Takibi)")
-    try:
-        genkm_data = yf.Ticker("GENKM.IS").history(period="1mo")
-        st.line_chart(genkm_data['Close'])
-    except:
-        st.write("Grafik verisi şu an çekilemiyor.")
+with tab2:
+    st.subheader("📈 Toplam Varlık Değişimi")
+    # Bu kısım gerçek geçmiş veri için veritabanı ister, şimdilik simülasyon yapıyoruz
+    chart_data = pd.DataFrame({
+        'Gün': range(1, 11),
+        'Toplam TL': [toplam_varlik * (1 + (i*0.01)) for i in range(10)]
+    })
+    st.line_chart(chart_data.set_index('Day'))
+
+with tab3:
+    st.subheader("🔍 Piyasa Analizi ve Sanal İşlem")
+    search_symbol = st.text_input("Hisse Kodu Gir (Örn: THYAO.IS)", "THYAO.IS")
+    if search_symbol:
+        ticker_search = yf.Ticker(search_symbol)
+        s_price = ticker_search.history(period="1d")['Close'].iloc[-1]
+        st.write(f"**Güncel Fiyat:** {s_price:.2f} TL")
+        st.line_chart(ticker_search.history(period="1mo")['Close'])
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button(f"AL: {search_symbol}"):
+                st.success(f"{search_symbol} alım emri simüle edildi.")
+        with c2:
+            if st.button(f"SAT: {search_symbol}"):
+                st.warning(f"{search_symbol} satış emri simüle edildi.")
 
 st.markdown("---")
-st.info("💡 **Mentor Notu:** Saha (hisse) hesabındaki o bar %100 olduğunda 20k hedefine ulaşmış olacaksın. Stajda uykun gelirse bu bara bak!")
+st.info("💡 **CoachInvest Notu:** 100K hedefi disiplin ister. Sahadaki hisselerin skor üretsin, fonların kalkanın olsun.")
