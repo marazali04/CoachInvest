@@ -4,138 +4,134 @@ import pandas as pd
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# 1. Sayfa Ayarları
-st.set_page_config(page_title="CoachInvest Terminal", layout="wide", initial_sidebar_state="expanded")
+# 1. Konfigürasyon
+st.set_page_config(page_title="CoachInvest Terminal", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. Login Sistemi (Admin Girişi)
+# 2. Hafıza ve Giriş Sistemi (Daha stabil yapı)
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'history' not in st.session_state:
+    st.session_state.history = []
 
-def login():
-    st.markdown("""<h2 style='text-align: center;'>🛡️ CoachInvest Giriş</h2>""", unsafe_allow_html=True)
-    with st.container():
-        col1, col2, col3 = st.columns([1,1,1])
-        with col2:
+# CSS: Fintables Karanlık Tema ve Kart Yapısı
+st.markdown("""
+    <style>
+    .main { background-color: #0b0e11; color: #e1e4e8; }
+    div[data-testid="stMetric"] { background-color: #161a1e; padding: 15px; border-radius: 8px; border: 1px solid #2f363d; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #161a1e; border-radius: 5px; }
+    .stDataFrame { border: 1px solid #2f363d; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- ÜST BAR (LOGIN OPSİYONU) ---
+with st.container():
+    c1, c2 = st.columns([8, 2])
+    c1.title("🛡️ CoachInvest: Profesyonel Yatırım Terminali")
+    if not st.session_state.logged_in:
+        with c2.popover("👤 Giriş / Kayıt Ol"):
             user = st.text_input("Kullanıcı Adı")
             pw = st.text_input("Şifre", type="password")
-            if st.button("Giriş Yap", use_container_width=True):
+            if st.button("Giriş"):
                 if user == "admin" and pw == "admin":
                     st.session_state.logged_in = True
                     st.rerun()
                 else:
-                    st.error("Hatalı kullanıcı adı veya şifre!")
+                    st.error("Hata!")
+    else:
+        c2.success(f"Hoş geldin, Admin")
+        if c2.button("Güvenli Çıkış"):
+            st.session_state.logged_in = False
+            st.rerun()
 
-if not st.session_state.logged_in:
-    login()
-    st.stop()
-
-# 3. Veri Hafızası
-if 'history' not in st.session_state:
-    st.session_state.history = []
-
-# 4. Görsel Tasarım (CSS)
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; color: white; }
-    div[data-testid="stMetric"] { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #3e4255; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #0e1117; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- YAN PANEL: KOMUTA ---
-st.sidebar.title("🛡️ CoachInvest Pro")
-st.sidebar.write(f"Hoş geldin, **Admin**")
-if st.sidebar.button("Güvenli Çıkış"):
-    st.session_state.logged_in = False
-    st.rerun()
-
-st.sidebar.markdown("---")
+# --- YAN PANEL: SADECE LOGGED IN KULLANICIYA ÖZEL ---
 target = 100000
 b_hisse = 9008.50
 b_fon = 9947.37
 
-with st.sidebar.form("nakit_formu"):
-    st.write("📥 Nakit Yönetimi")
-    e_tl = st.number_input("Ekle (TL)", value=0.0)
-    c_tl = st.number_input("Çek (TL)", value=0.0)
-    if st.form_submit_button("Onayla"):
-        z = datetime.now().strftime("%d/%m %H:%M")
-        if e_tl > 0: st.session_state.history.append({"Zaman": z, "Tip": "Ekle", "Miktar": e_tl})
-        if c_tl > 0: st.session_state.history.append({"Zaman": z, "Tip": "Çek", "Miktar": -c_tl})
-
-# Hesaplamalar
-ekstra = sum([i['Miktar'] for i in st.session_state.history])
-c_cash = b_fon + ekstra
-toplam_v = b_hisse + c_cash
-oran = (toplam_v / target) * 100
-
-st.sidebar.metric("Toplam Varlık", f"{toplam_v:,.2f} TL")
-st.sidebar.progress(min(toplam_v/target, 1.0))
-st.sidebar.write(f"Hedef İlerleme: %{oran:.2f}")
+if st.session_state.logged_in:
+    st.sidebar.header("🎯 Portföy Yönetimi")
+    with st.sidebar.form("para_y"):
+        ekle = st.number_input("Para Ekle (TL)", value=0.0)
+        cek = st.number_input("Para Çek (TL)", value=0.0)
+        if st.form_submit_button("İşlemi Kaydet"):
+            z = datetime.now().strftime("%d/%m %H:%M")
+            if ekle > 0: st.session_state.history.append({"Zaman": z, "Tip": "Ekle", "Miktar": ekle})
+            if cek > 0: st.session_state.history.append({"Zaman": z, "Tip": "Çek", "Miktar": -cek})
+    
+    ekstra = sum([i['Miktar'] for i in st.session_state.history])
+    c_cash = b_fon + ekstra
+    toplam_v = b_hisse + c_cash
+    st.sidebar.metric("Toplam Varlık", f"{toplam_v:,.2f} TL")
+    st.sidebar.progress(min(toplam_v/target, 1.0))
+else:
+    toplam_v = b_hisse + b_fon # Preview için
+    st.sidebar.info("Özel portföy verilerini görmek için giriş yapmalısınız.")
 
 # --- ANA SAYFA TABS ---
-t1, t2, t3 = st.tabs(["📊 Portföyüm", "🔍 Hisse Terminali (Fintables Style)", "🕒 İşlem Tarihçesi"])
+t_home, t_term, t_hist = st.tabs(["🏠 Dashboard", "🔍 Hisse Analiz (Fintables)", "🕒 İşlem Geçmişi"])
 
-with t1:
-    col_a, col_b = st.columns([1, 1.2])
-    with col_a:
-        st.subheader("Aktif Varlıklar")
-        h_names = ["GENKM.IS", "NUHCM.IS", "TOASO.IS"]
-        h_lots = [85, 25, 12]
-        p_rows = []
-        for i, (h, l) in enumerate(zip(h_names, h_lots), 1):
-            try:
-                p = yf.Ticker(h).history(period="1d")['Close'].iloc[-1]
-                p_rows.append({"No": i, "Varlık": h.replace(".IS",""), "Fiyat": f"{p:.2f}", "Toplam": round(p*l, 2)})
-            except:
-                p_rows.append({"No": i, "Varlık": h, "Fiyat": "0.00", "Toplam": 0.0})
-        p_rows.append({"No": len(p_rows)+1, "Varlık": "TP2 FON", "Fiyat": "-", "Toplam": round(c_cash, 2)})
-        st.dataframe(pd.DataFrame(p_rows), hide_index=True, use_container_width=True,
-                     column_config={"No": st.column_config.Column(width="small")})
-    with col_b:
-        st.subheader("Stratejik Varlık Dağılımı")
-        st.area_chart(pd.DataFrame({'V': [toplam_v*0.97, toplam_v*0.99, toplam_v]}), color="#29b5e8")
+with t_home:
+    st.subheader("📊 Piyasa Genel Bakış")
+    # Canlı Isı Haritası ve Endeks Özetleri
+    overview_html = """
+    <div style="height: 450px;">
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+    {
+      "colorTheme": "dark", "dateRange": "12M", "showChart": true, "locale": "tr", "width": "100%", "height": "100%",
+      "symbolsGroups": [
+        { "name": "Endeksler", "originalName": "Indices", "symbols": [
+            { "name": "BIST:XU100", "displayName": "BIST 100" },
+            { "name": "BIST:XU030", "displayName": "BIST 30" }
+        ]}
+      ]
+    }
+    </script></div>"""
+    components.html(overview_html, height=460)
 
-with t2:
-    st.subheader("🔍 Temel ve Teknik Analiz Merkezi")
-    bist_all = sorted(["THYAO", "EREGL", "SASA", "ASELS", "TUPRS", "KCHOL", "SISE", "BIMAS", "AKBNK", "GARAN", "ISCTR", "YKBNK", "GENKM", "NUHCM", "TOASO", "MIATK", "KONTR", "YEOTK", "REEDR", "TABGD"])
-    
-    sel = st.selectbox("Analiz edilecek hisseyi seçin:", [""] + bist_all)
-    
+    if st.session_state.logged_in:
+        st.markdown("---")
+        st.subheader("💼 Mevcut Varlıklarım")
+        h_data = [
+            {"Varlık": "GENKM", "Lot": 85, "Maliyet": "13.00"},
+            {"Varlık": "NUHCM", "Lot": 25, "Maliyet": "280.00"},
+            {"Varlık": "TOASO", "Lot": 12, "Maliyet": "300.00"}
+        ]
+        st.table(pd.DataFrame(h_data))
+
+with t_term:
+    st.subheader("🔍 Fintables Tarzı Temel Analiz")
+    bist_pop = sorted(["THYAO", "EREGL", "SASA", "ASELS", "TUPRS", "KCHOL", "SISE", "BIMAS", "AKBNK", "GENKM", "NUHCM", "MIATK", "KONTR", "ASTOR"])
+    sel = st.selectbox("Hisse Seçin", [""] + bist_pop)
+
     if sel:
-        ticker = yf.Ticker(f"{sel}.IS")
+        tick = yf.Ticker(f"{sel}.IS")
+        info = tick.info
         
-        # Fintables Tarzı Başlık Metrikleri
-        c1, c2, c3, c4 = st.columns(4)
-        info = ticker.fast_info
-        last_price = info.last_price
-        c1.metric("Son Fiyat", f"{last_price:.2f} TL")
-        c2.metric("Piyasa Değeri", f"{info.market_cap/1e9:.2f} Milyar")
-        c3.metric("Günlük Hacim", f"{info.last_volume/1e6:.1f} Milyon")
-        c4.metric("52 Haftalık Zirve", f"{info.year_high:.2f} TL")
+        # Üst Metrikler (Fintables Style)
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("F/K", f"{info.get('trailingPE', 'N/A')}")
+        m2.metric("PD/DD", f"{info.get('priceToBook', 'N/A')}")
+        m3.metric("FD/FAVÖK", f"{info.get('enterpriseToEbitda', 'N/A')}")
+        m4.metric("Temettü Verimi", f"%{info.get('dividendYield', 0)*100:.2f}")
+        m5.metric("Özsermaye Karlılığı", f"%{info.get('returnOnEquity', 0)*100:.2f}")
 
-        # Fintables Tarzı Tablo Menüsü
-        sub_t1, sub_t2, sub_t3, sub_t4 = st.tabs(["📉 Grafik", "🧾 Gelir Tablosu", "🏦 Bilanço", "💸 Nakit Akışı"])
+        # Sekmeli Detay Analiz
+        s_t1, s_t2, s_t3, s_t4 = st.tabs(["📉 Teknik Grafik", "📊 Gelir Tablosu", "🏦 Bilanço", "💸 Nakit Akışı"])
         
-        with sub_t1:
-            tv_html = f'<div style="height:500px;"><div id="tv_chart"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({{"width": "100%", "height": 500, "symbol": "BIST:{sel}", "interval": "D", "timezone": "Europe/Istanbul", "theme": "dark", "style": "1", "locale": "tr", "container_id": "tv_chart", "hide_side_toolbar": false, "allow_symbol_change": true, "save_image": false}});</script></div>'
-            components.html(tv_html, height=520)
+        with s_t1:
+            chart_html = f'<div style="height:500px;"><div id="tv_chart"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({{"width": "100%", "height": 500, "symbol": "BIST:{sel}", "interval": "D", "theme": "dark", "locale": "tr", "container_id": "tv_chart"}});</script></div>'
+            components.html(chart_html, height=520)
         
-        with sub_t2:
-            st.dataframe(ticker.financials, use_container_width=True)
-        with sub_t3:
-            st.dataframe(ticker.balance_sheet, use_container_width=True)
-        with sub_t4:
-            st.dataframe(ticker.cashflow, use_container_width=True)
+        with s_t2: st.dataframe(tick.financials)
+        with s_t3: st.dataframe(tick.balance_sheet)
+        with s_t4: st.dataframe(tick.cashflow)
 
-with t3:
-    st.subheader("🕒 İşlem Kayıtları")
-    if st.session_state.history:
-        df_hist = pd.DataFrame(st.session_state.history)[::-1]
-        df_hist.insert(0, 'No', range(1, len(df_hist) + 1))
-        st.table(df_hist)
-    else:
-        st.info("Henüz onaylanmış bir işlem yok.")
+with t_hist:
+    if st.session_state.logged_in:
+        st.subheader("🕒 İşlem Tarihçesi")
+        if st.session_state.history:
+            st.table(pd.DataFrame(st.session_state.history)[::-1])
+        else: st.info("Henüz işlem yok.")
+    else: st.warning("Bu bölümü görmek için giriş yapmalısınız.")
 
-st.markdown("---")
-st.caption("CoachInvest v3.0 | Kurumsal Altyapı | Mentor: Gemini")
+st.caption("CoachInvest v4.0 | Strateji her şeydir.")
