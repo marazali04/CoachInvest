@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 # 1. Sayfa Ayarları
 st.set_page_config(page_title="CoachInvest 100K", layout="wide")
 
-# 2. Hafıza (Session State) Kontrolü
+# 2. Hafıza (Session State)
 if 'history' not in st.session_state:
     st.session_state.history = []
 
@@ -19,62 +19,45 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🛡️ CoachInvest: 100K Terminal")
+st.title("🛡️ CoachInvest: 100K Strateji Merkezi")
 
 # --- YAN PANEL: KOMUTA ---
 st.sidebar.header("🎯 Hedef: 100.000 TL")
 target = 100000
-baslangic_hisse = 9008.50
-baslangic_fon = 9947.37
+# Midas'tan gelen sabit başlangıç değerlerin
+b_hisse = 9008.50
+b_fon = 9947.37
 
-with st.sidebar.form("mermi_paneli"):
-    st.write("📥 Para Giriş/Çıkış")
-    ekle = st.number_input("Ekle (TL)", value=0.0)
-    cek = st.number_input("Çek (TL)", value=0.0)
-    submit = st.form_submit_button("Onayla")
-    
-    if submit:
-        simdi = datetime.now().strftime("%d/%m/%Y %H:%M")
-        if ekle > 0:
-            st.session_state.history.append({"Zaman": simdi, "İşlem": "Ekleme", "Miktar": ekle})
-        if cek > 0:
-            st.session_state.history.append({"Zaman": simdi, "İşlem": "Çekme", "Miktar": -cek})
+with st.sidebar.form("para_yonetimi"):
+    st.write("📥 Nakit Hareketi")
+    e_tl = st.number_input("Ekle (TL)", value=0.0)
+    c_tl = st.number_input("Çek (TL)", value=0.0)
+    onay = st.form_submit_button("İşlemi Onayla")
+    if onay:
+        z = datetime.now().strftime("%H:%M")
+        if e_tl > 0: st.session_state.history.append({"Zaman": z, "Tip": "Ekle", "Miktar": e_tl})
+        if c_tl > 0: st.session_state.history.append({"Zaman": z, "Tip": "Çek", "Miktar": -c_tl})
 
-# Dinamik Hesaplama
-toplam_mermi = sum([item['Miktar'] for item in st.session_state.history])
-current_cash = baslangic_fon + toplam_mermi
-toplam_varlik = baslangic_hisse + current_cash
-ilerleme = (toplam_varlik / target) * 100
+# Hesaplamalar
+ekstra = sum([i['Miktar'] for i in st.session_state.history])
+current_cash = b_fon + ekstra
+toplam = b_hisse + current_cash
+oran = (toplam / target) * 100
 
-st.sidebar.metric("Toplam Varlık", f"{toplam_varlik:,.2f} TL")
-st.sidebar.progress(min(toplam_varlik / target, 1.0))
-st.sidebar.write(f"**Hedef İlerleme:** %{ilerleme:.2f}")
+st.sidebar.metric("Toplam Varlık", f"{toplam:,.2f} TL")
+st.sidebar.progress(min(toplam/target, 1.0))
+st.sidebar.write(f"**Hedef İlerleme:** %{oran:.2f}")
 
-# --- ANA SAYFA TABS ---
-t1, t2, t3 = st.tabs(["📊 Portföyüm", "🔍 BIST Terminal", "🕒 Tarihçe"])
+# --- ANA SAYFA: TABS ---
+t1, t2, t3 = st.tabs(["📊 Portföyüm", "🔍 BIST Analiz", "🕒 Tarihçe"])
 
 with t1:
-    c1, c2 = st.columns([1, 1.2])
-    with c1:
-        st.subheader("BIST Portföy")
-        hisseler = ["GENKM.IS", "NUHCM.IS", "TOASO.IS"]
-        lotlar = [85, 25, 12]
-        p_list = []
-        for i, (h, l) in enumerate(zip(hisseler, lotlar), 1):
+    col_a, col_b = st.columns([1, 1.2])
+    with col_a:
+        st.subheader("BIST Detay")
+        h_names = ["GENKM.IS", "NUHCM.IS", "TOASO.IS"]
+        h_lots = [85, 25, 12]
+        p_rows = []
+        for i, (h, l) in enumerate(zip(h_names, h_lots), 1):
             try:
-                p = yf.Ticker(h).history(period="1d")['Close'].iloc[-1]
-                p_list.append({"No": i, "Hisse": h, "Fiyat": f"{p:.2f}", "Değer": round(p*l, 2)})
-            except:
-                p_list.append({"No": i, "Hisse": h, "Fiyat": "0.00", "Değer": 0.0})
-        
-        st.dataframe(pd.DataFrame(p_list), hide_index=True, use_container_width=True,
-                     column_config={"No": st.column_config.Column(width="small")})
-    
-    with c2:
-        st.subheader("📈 Toplam Varlık")
-        chart_data = pd.DataFrame({'Varlık': [toplam_varlik*0.97, toplam_varlik*0.99, toplam_varlik]})
-        st.area_chart(chart_data, color="#29b5e8")
-
-with t2:
-    st.subheader("🔍 Tüm Hisseler ve TradingView")
-    bist_liste =
+                p = yf.Ticker
