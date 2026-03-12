@@ -206,7 +206,7 @@ elif st.session_state.page == "Hisse Analiz Terminali":
                     plot_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                [Image of an interactive candlestick stock chart with moving average lines and price volume bars]
+                
                 
             with t_bilanco:
                 st.subheader("Dönemsel Bilanço")
@@ -310,4 +310,3 @@ elif st.session_state.page == "Portföy & Yönetim":
                          hole=0.6, color_discrete_sequence=['#00ADB5', '#333333'])
             fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
-            [Image of a financial portfolio treemap visualization showing stock weights and performance]
