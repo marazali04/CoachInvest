@@ -1,155 +1,313 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import time
+import plotly.express as px
+from datetime import datetime
 
-# 1. KONFİGÜRASYON
-st.set_page_config(page_title="CoachInvest Terminal", layout="wide", page_icon="🛡️")
+# ==========================================
+# 1. PLATFORM AYARLARI & FINTABLES CSS
+# ==========================================
+st.set_page_config(page_title="CoachInvest Pro", layout="wide", page_icon="📈")
 
-# 2. STATE YÖNETİMİ (Kayıt, Giriş ve Hafıza)
-if 'users' not in st.session_state: st.session_state.users = {"admin": "admin"}
-if 'user' not in st.session_state: st.session_state.user = None
-if 'history' not in st.session_state: st.session_state.history = []
-if 'page' not in st.session_state: st.session_state.page = "🏠 Dashboard"
-
-# 3. ÖNBELLEKLEME & GÜVENLİ VERİ MOTORU
-@st.cache_data(ttl=600)
-def fetch_bist_summary():
-    # En aktif 30 hisseyi çekerek "Native Heatmap" oluşturur
-    tickers = ["THYAO.IS", "EREGL.IS", "SASA.IS", "ASELS.IS", "TUPRS.IS", "KCHOL.IS", "SISE.IS", 
-               "BIMAS.IS", "AKBNK.IS", "GARAN.IS", "ISCTR.IS", "YKBNK.IS", "HEKTS.IS", "EKGYO.IS", 
-               "KOZAL.IS", "ARCLK.IS", "FROTO.IS", "TOASO.IS", "TCELL.IS", "TTKOM.IS"]
-    data = []
-    for t_code in tickers:
-        try:
-            t = yf.Ticker(t_code)
-            hist = t.history(period="2d")
-            if len(hist) > 1:
-                price = hist['Close'].iloc[-1]
-                change = ((price / hist['Close'].iloc[-2]) - 1) * 100
-                data.append({"Hisse": t_code.replace(".IS",""), "Fiyat": price, "Değişim": change})
-        except: continue
-    return pd.DataFrame(data)
-
-# 4. GÖRSEL STİL (CSS)
 st.markdown("""
     <style>
-    .main { background-color: #05070a; color: #e1e4e8; }
-    div[data-testid="stMetric"] { background-color: #0d1117; border: 1px solid #1f242d; border-radius: 12px; padding: 20px; }
-    .stButton>button { width: 100%; border-radius: 8px; border: 1px solid #1f242d; background-color: #161b22; }
-    .stButton>button:hover { border-color: #00ff88; color: #00ff88; }
+    /* Premium Koyu Tema */
+    .main { background-color: #121212; color: #E0E0E0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    /* Metrik Kartları (Fintables Style) */
+    div[data-testid="stMetric"] {
+        background-color: #1E1E1E;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* Tab Menüleri */
+    .stTabs [data-baseweb="tab-list"] { background-color: transparent; gap: 20px; }
+    .stTabs [data-baseweb="tab"] { color: #888; font-weight: 600; font-size: 16px; padding-bottom: 10px; }
+    .stTabs [aria-selected="true"] { color: #00ADB5 !important; border-bottom: 3px solid #00ADB5 !important; }
+    
+    /* Tablolar */
+    .stDataFrame { border: 1px solid #333; border-radius: 8px; }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] { background-color: #181818; border-right: 1px solid #222; }
+    
+    /* Renk Sınıfları */
+    .text-green { color: #00E676; font-weight: 600; }
+    .text-red { color: #FF1744; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SOL NAVİGASYON VE AUTH ---
+# ==========================================
+# 2. VERİ MOTORU (Güvenli & Önbellekli)
+# ==========================================
+@st.cache_data(ttl=3600)
+def get_stock_profile(symbol):
+    try:
+        t = yf.Ticker(f"{symbol}.IS")
+        info = t.info
+        hist = t.history(period="6mo")
+        return info, hist, t
+    except:
+        return None, None, None
+
+def format_large_numbers(num):
+    if pd.isna(num) or num is None: return "N/A"
+    if num >= 1e9: return f"{num/1e9:.2f} Milyar TL"
+    if num >= 1e6: return f"{num/1e6:.2f} Milyon TL"
+    return f"{num:,.2f} TL"
+
+# ==========================================
+# 3. STATE YÖNETİMİ
+# ==========================================
+if 'page' not in st.session_state: st.session_state.page = "Piyasalar"
+if 'user' not in st.session_state: st.session_state.user = None
+if 'history' not in st.session_state: st.session_state.history = []
+
+# ==========================================
+# 4. NAVİGASYON (SOL PANEL)
+# ==========================================
 with st.sidebar:
-    st.markdown("<h1 style='color:#00ff88;'>🛡️ COACHINVEST</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#00ADB5; text-align:center;'>COACHINVEST</h2>", unsafe_allow_html=True)
+    st.caption("<div style='text-align:center;'>Finansal Analiz Platformu</div>", unsafe_allow_html=True)
     st.markdown("---")
     
+    menu = ["Piyasalar", "Hisse Analiz Terminali", "Portföy & Yönetim"]
+    for m in menu:
+        if st.button(m, use_container_width=True):
+            st.session_state.page = m
+            st.rerun()
+            
+    st.markdown("---")
     if st.session_state.user:
-        st.success(f"Hoş geldin, {st.session_state.user}")
-        if st.button("🏠 Dashboard"): st.session_state.page = "🏠 Dashboard"
-        if st.button("📡 BIST Radar"): st.session_state.page = "📡 BIST Radar"
-        if st.button("📈 Portföyüm"): st.session_state.page = "📈 Portföyüm"
-        st.markdown("---")
-        if st.button("🚪 Güvenli Çıkış"):
+        st.success(f"Oturum: {st.session_state.user}")
+        if st.button("Çıkış Yap", use_container_width=True):
             st.session_state.user = None
             st.rerun()
     else:
-        auth_choice = st.radio("Sisteme Katıl", ["Giriş Yap", "Kayıt Ol"])
-        u_name = st.text_input("Kullanıcı Adı")
-        u_pass = st.text_input("Şifre", type="password")
-        if auth_choice == "Giriş Yap":
-            if st.button("Giriş"):
-                if u_name in st.session_state.users and st.session_state.users[u_name] == u_pass:
-                    st.session_state.user = u_name
-                    st.rerun()
-                else: st.error("Hatalı bilgiler!")
-        else:
-            if st.button("Hesap Oluştur"):
-                st.session_state.users[u_name] = u_pass
-                st.success("Kayıt Başarılı! Şimdi giriş yapın.")
+        st.write("🔑 **Sistem Girişi**")
+        u = st.text_input("Kullanıcı Adı")
+        p = st.text_input("Şifre", type="password")
+        if st.button("Giriş", use_container_width=True):
+            if u == "admin" and p == "admin":  # Basit auth
+                st.session_state.user = u
+                st.rerun()
+            else:
+                st.error("Hatalı giriş.")
 
-# --- SAYFA MANTIKLARI ---
+# ==========================================
+# 5. SAYFA İÇERİKLERİ
+# ==========================================
 
-# 1. NATIVE DASHBOARD (TradingView Yerine Plotly)
-if st.session_state.page == "🏠 Dashboard":
-    st.header("🏠 Piyasa Panoraması (Native)")
+# --- SAYFA 1: PİYASALAR (DASHBOARD) ---
+if st.session_state.page == "Piyasalar":
+    st.header("🌐 Küresel ve Yerel Piyasalar")
     
-    # Isı Haritası Verisi
-    df_market = fetch_bist_summary()
+    # Üst Endeks Kartları
+    c1, c2, c3, c4 = st.columns(4)
+    indices = {"BIST 100": "XU100.IS", "S&P 500": "^GSPC", "Dolar/TL": "USDTRY=X", "Altın (Ons)": "GC=F"}
     
-    if not df_market.empty:
-        # Plotly Treemap (Native Heatmap)
-        fig = px.treemap(df_market, path=['Hisse'], values='Fiyat', color='Değişim',
-                         color_continuous_scale=['#ff3333', '#161b22', '#00ff88'],
-                         color_continuous_midpoint=0)
-        fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), paper_bgcolor="rgba(0,0,0,0)", height=600)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Piyasa verileri şu an yüklenemiyor (Rate Limit). Lütfen bekleyin.")
-
-# 2. BIST RADAR (Kapsamlı ve Temiz)
-elif st.session_state.page == "📡 BIST Radar":
-    st.header("📡 BIST Akıllı Radar")
-    st.info("Aşağıdaki arama çubuğuna dilediğiniz hisseyi yazın.")
-    
-    search_symbol = st.text_input("🔍 Hisse Kodu Ara (Örn: GENKM, NUHCM):", "").upper()
-    
-    if search_symbol:
+    for col, (name, symbol) in zip([c1, c2, c3, c4], indices.items()):
         try:
-            t = yf.Ticker(f"{search_symbol}.IS")
-            hist = t.history(period="1y")
+            t = yf.Ticker(symbol).fast_info
+            last = t.last_price
+            prev = t.previous_close
+            pct = ((last - prev) / prev) * 100
+            col.metric(name, f"{last:,.2f}", f"{pct:.2f}%")
+        except:
+            col.metric(name, "Veri Yok", "0%")
             
-            if not hist.empty:
-                # Teknik Analiz (SMA & RSI)
-                delta = hist['Close'].diff()
-                gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-                rs = gain / loss
-                hist['RSI'] = 100 - (100 / (1 + rs))
-                
-                # Plotly Chart
-                fig_stock = go.Figure()
-                fig_stock.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name="Fiyat"))
-                fig_stock.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=500)
-                st.plotly_chart(fig_stock, use_container_width=True)
-                
-                # Performans Tablosu
-                perf_data = {
-                    "1 Ay": f"%{((hist['Close'].iloc[-1]/hist['Close'].iloc[-21])-1)*100:.2f}",
-                    "6 Ay": f"%{((hist['Close'].iloc[-1]/hist['Close'].iloc[-126])-1)*100:.2f}",
-                    "F/K": t.info.get('trailingPE', 'N/A'),
-                    "PD/DD": t.info.get('priceToBook', 'N/A')
-                }
-                st.table(pd.DataFrame([perf_data]))
-            else: st.error("Hisse bulunamadı.")
-        except: st.error("Veri çekme hatası (Rate Limit). Lütfen biraz bekleyin.")
+    st.markdown("---")
+    st.subheader("🔥 BIST 30 Özet Ekranı")
+    st.info("Piyasanın lokomotif hisselerinin anlık durumları (Native Tablo)")
+    
+    # Hızlı BIST 30 Çekimi
+    bist30 = ["THYAO", "EREGL", "TUPRS", "KCHOL", "AKBNK", "ISCTR", "SAHOL", "BIMAS", "ASELS", "SISE"]
+    market_data = []
+    for s in bist30:
+        try:
+            t = yf.Ticker(f"{s}.IS").fast_info
+            chg = ((t.last_price / t.previous_close) - 1) * 100
+            market_data.append({"Sembol": s, "Fiyat": f"{t.last_price:.2f}", "Değişim (%)": chg, "Hacim": t.last_volume})
+        except: continue
+        
+    if market_data:
+        df_m = pd.DataFrame(market_data)
+        # Renklendirme
+        def color_pct(val):
+            color = '#00E676' if val > 0 else '#FF1744'
+            return f'color: {color}; font-weight: bold;'
+            
+        st.dataframe(df_m.style.applymap(color_pct, subset=['Değişim (%)']).format({'Değişim (%)': '{:.2f}%', 'Hacim': '{:,.0f}'}), 
+                     use_container_width=True, hide_index=True)
 
-# 3. PORTFÖYÜM
-elif st.session_state.page == "📈 Portföyüm":
+# --- SAYFA 2: HİSSE ANALİZ (FINTABLES CORE) ---
+elif st.session_state.page == "Hisse Analiz Terminali":
+    st.header("🔍 Kapsamlı Şirket Analizi")
+    
+    # Dev Arama Çubuğu
+    search = st.text_input("Şirket Kodunu Girin (Örn: GENKM, THYAO, FROTO):", "THYAO").upper()
+    
+    if search:
+        info, hist, ticker = get_stock_profile(search)
+        
+        if info and not hist.empty:
+            # 1. Şirket Başlığı ve Ana Fiyat
+            st.markdown(f"## {info.get('longName', search)}")
+            st.markdown(f"Sektör: **{info.get('sector', 'Bilinmiyor')}** | Endeks: **BIST**")
+            
+            # 2. Ana Metrikler (Rasyolar)
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("Son Fiyat", f"{hist['Close'].iloc[-1]:.2f} TL")
+            m2.metric("Piyasa Değeri", format_large_numbers(info.get('marketCap')))
+            m3.metric("F/K Oranı", info.get('trailingPE', 'N/A'))
+            m4.metric("PD/DD", info.get('priceToBook', 'N/A'))
+            m5.metric("FD/FAVÖK", info.get('enterpriseToEbitda', 'N/A'))
+            
+            st.markdown("---")
+            
+            # 3. FINTABLES STİLİ TABLAR
+            t_ozet, t_grafik, t_bilanco, t_gelir, t_nakit = st.tabs([
+                "📋 Özet Rapor", "📉 Teknik Grafik", "🏦 Bilanço", "📊 Gelir Tablosu", "💸 Nakit Akım"
+            ])
+            
+            with t_ozet:
+                col_a, col_b = st.columns([1, 1])
+                with col_a:
+                    st.subheader("Şirket Profili")
+                    st.write(info.get('longBusinessSummary', 'Açıklama bulunamadı.')[:800] + "...")
+                with col_b:
+                    st.subheader("Kârlılık Oranları")
+                    st.write(f"- **Brüt Kâr Marjı:** %{info.get('grossMargins', 0)*100:.2f}")
+                    st.write(f"- **FAVÖK Marjı:** %{info.get('ebitdaMargins', 0)*100:.2f}")
+                    st.write(f"- **Net Kâr Marjı:** %{info.get('profitMargins', 0)*100:.2f}")
+                    st.write(f"- **Özsermaye Kârlılığı (ROE):** %{info.get('returnOnEquity', 0)*100:.2f}")
+                    st.write(f"- **Temettü Verimi:** %{info.get('dividendYield', 0)*100:.2f}")
+            
+            with t_grafik:
+                # Plotly Native Candlestick (TradingView Değil)
+                fig = go.Figure()
+                fig.add_trace(go.Candlestick(
+                    x=hist.index, open=hist['Open'], high=hist['High'],
+                    low=hist['Low'], close=hist['Close'], name="Fiyat"
+                ))
+                # 20 Günlük Ortalama
+                fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'].rolling(20).mean(), line=dict(color='#00ADB5', width=1.5), name="20G Ort"))
+                
+                fig.update_layout(
+                    title=f"{search} - 6 Aylık Fiyat Hareketi",
+                    template="plotly_dark",
+                    xaxis_rangeslider_visible=False,
+                    height=500,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                [Image of an interactive candlestick stock chart with moving average lines and price volume bars]
+                
+            with t_bilanco:
+                st.subheader("Dönemsel Bilanço")
+                bs = ticker.balance_sheet
+                if not bs.empty: st.dataframe(bs, use_container_width=True)
+                else: st.info("Bilanço verisi çekilemedi.")
+                
+            with t_gelir:
+                st.subheader("Gelir Tablosu")
+                fin = ticker.financials
+                if not fin.empty: st.dataframe(fin, use_container_width=True)
+                else: st.info("Gelir tablosu verisi çekilemedi.")
+                
+            with t_nakit:
+                st.subheader("Nakit Akım Tablosu")
+                cf = ticker.cashflow
+                if not cf.empty: st.dataframe(cf, use_container_width=True)
+                else: st.info("Nakit akım verisi çekilemedi.")
+                
+        else:
+            st.error("⚠️ Geçersiz hisse kodu veya veri sağlayıcı (Yahoo Finance) geçici olarak yanıt vermiyor.")
+
+# --- SAYFA 3: PORTFÖY & YÖNETİM (ADMIN) ---
+elif st.session_state.page == "Portföy & Yönetim":
     if not st.session_state.user:
-        st.warning("🔒 Portföyünüzü görmek için lütfen giriş yapın.")
+        st.error("🔒 Bu sayfayı görüntülemek için giriş yapmalısınız.")
     else:
-        st.header(f"💼 {st.session_state.user} - Portföy Analizi")
-        # Sabit portföy verileri (Daha sonra DB'ye bağlanacak)
-        mermiler = sum([i['Miktar'] for i in st.session_state.history])
-        tp2_bakiye = 9959.49 + mermiler
+        st.header("💼 Stratejik Portföy Yönetimi")
         
-        c1, c2 = st.columns(2)
-        c1.metric("Toplam Varlık", f"{12695.38 + tp2_bakiye:,.2f} TL")
-        c2.metric("Nakit Gücü (TP2)", f"{tp2_bakiye:,.2f} TL")
+        # Mermi Yönetimi
+        with st.expander("💰 Mermi (Nakit) Girişi Yap", expanded=False):
+            with st.form("add_cash"):
+                miktar = st.number_input("Eklenecek Tutar (TL)", min_value=0.0)
+                if st.form_submit_button("Sisteme İşle"):
+                    st.session_state.history.append({"Tarih": datetime.now().strftime("%d/%m %H:%M"), "Miktar": miktar})
+                    st.success("Mermi eklendi!")
+                    st.rerun()
         
-        # Kar/Zarar Tablosu (Renkli)
-        st.subheader("Pozisyonlar")
-        h_data = [
-            {"Varlık": "GENKM", "Kar/Zarar": "263.50 TL (%23.85)", "Tip": "Pozitif"},
-            {"Varlık": "NUHCM", "Kar/Zarar": "675.00 TL (%9.64)", "Tip": "Pozitif"},
-            {"Varlık": "TOASO", "Kar/Zarar": "54.00 TL (%1.50)", "Tip": "Pozitif"}
+        # Portföy Hesaplamaları
+        eklenen_nakit = sum([i['Miktar'] for i in st.session_state.history])
+        tp2_bakiye = 9959.49 + eklenen_nakit
+        
+        # Senin Hisselerin
+        portfoy = [
+            {"Hisse": "GENKM", "Lot": 85, "Maliyet": 13.00},
+            {"Hisse": "NUHCM", "Lot": 25, "Maliyet": 280.00},
+            {"Hisse": "TOASO", "Lot": 12, "Maliyet": 300.00}
         ]
-        st.table(h_data)
-
-st.sidebar.caption("v15.0 Elite Terminal | Native Architecture")
+        
+        toplam_hisse_degeri = 0
+        analiz_tablosu = []
+        
+        for p in portfoy:
+            try:
+                son_fiyat = yf.Ticker(f"{p['Hisse']}.IS").fast_info.last_price
+                guncel_deger = son_fiyat * p['Lot']
+                toplam_hisse_degeri += guncel_deger
+                kar_tl = guncel_deger - (p['Maliyet'] * p['Lot'])
+                kar_yuzde = (kar_tl / (p['Maliyet'] * p['Lot'])) * 100
+                
+                analiz_tablosu.append({
+                    "Varlık": p['Hisse'],
+                    "Maliyet": f"{p['Maliyet']:.2f} TL",
+                    "Güncel Fiyat": f"{son_fiyat:.2f} TL",
+                    "Toplam Değer": f"{guncel_deger:,.2f} TL",
+                    "Kâr/Zarar": f"{kar_tl:,.2f} TL (%{kar_yuzde:.2f})"
+                })
+            except: continue
+            
+        toplam_varlik = toplam_hisse_degeri + tp2_bakiye
+        
+        # Üst Özet
+        st.markdown(f"### 🎯 100K Hedef İlerlemesi: %{(toplam_varlik/100000)*100:.2f}")
+        st.progress(min(toplam_varlik/100000, 1.0))
+        
+        col_v1, col_v2, col_v3 = st.columns(3)
+        col_v1.metric("Toplam Net Varlık", f"{toplam_varlik:,.2f} TL")
+        col_v2.metric("Hisse Senedi Büyüklüğü", f"{toplam_hisse_degeri:,.2f} TL")
+        col_v3.metric("Yatırım Fonu (TP2)", f"{tp2_bakiye:,.2f} TL")
+        
+        st.markdown("---")
+        
+        # Varlık Dağılımı (Donut Chart) ve Tablo
+        col_tab, col_grafik = st.columns([1.5, 1])
+        
+        with col_tab:
+            st.subheader("Açık Pozisyonlar")
+            df_port = pd.DataFrame(analiz_tablosu)
+            if not df_port.empty:
+                # Renklendirme fonksiyonu
+                def color_pnl(val):
+                    if isinstance(val, str) and 'TL' in val and '%' in val:
+                        color = '#00E676' if not '-' in val else '#FF1744'
+                        return f'color: {color}; font-weight: bold;'
+                    return ''
+                st.dataframe(df_port.style.applymap(color_pnl, subset=['Kâr/Zarar']), use_container_width=True, hide_index=True)
+                
+        with col_grafik:
+            st.subheader("Dağılım")
+            fig = px.pie(values=[toplam_hisse_degeri, tp2_bakiye], names=['Hisseler', 'Fon (TP2)'], 
+                         hole=0.6, color_discrete_sequence=['#00ADB5', '#333333'])
+            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+            [Image of a financial portfolio treemap visualization showing stock weights and performance]
